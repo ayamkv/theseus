@@ -215,9 +215,13 @@ class Host implements exe.WasmHost {
   private createMobileKeyboard() {
     const toggle = document.createElement("button");
     toggle.className = "mobile-keyboard-toggle";
-    toggle.textContent = "⌨";
     toggle.title = "Type text";
     toggle.setAttribute("aria-label", "Type text");
+    // Drawn rather than an emoji so it looks the same on every platform.
+    toggle.innerHTML = `<svg viewBox="0 0 16 12" width="32" height="24" shape-rendering="crispEdges" aria-hidden="true">
+      <path fill="#004918" d="M1 0h14v1h1v10h-1v1H1v-1H0V1h1z"/>
+      <path fill="currentColor" d="M2 2h2v2H2zM5 2h2v2H5zM8 2h2v2H8zM11 2h3v2h-3zM2 5h3v2H2zM6 5h2v2H6zM9 5h2v2H9zM12 5h2v2h-2zM4 8h8v2H4z"/>
+    </svg>`;
     toggle.addEventListener("click", () => {
       // Using the native prompt avoids building an input UI; the returned
       // text is typed into the game, then Enter confirms it.
