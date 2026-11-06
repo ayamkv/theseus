@@ -1,5 +1,12 @@
 <!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="theme-color" content="#008229" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black" />
+<meta name="apple-mobile-web-app-title" content="Lemonade" />
+<title>Lemonade</title>
+<link rel="manifest" href="./manifest.webmanifest" />
+<link rel="apple-touch-icon" href="./icon-180.png" />
 <style>
     html,
     body {
@@ -24,6 +31,84 @@
     }
     canvas {
         image-rendering: pixelated;
+    }
+    #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 100;
+        display: grid;
+        place-items: center;
+        background: repeating-linear-gradient(135deg, #009631 0 18px, #008229 18px 36px);
+        /* Wait a moment before appearing so fast cached loads show no flash. */
+        opacity: 0;
+        animation: boot-in 0.15s ease 0.25s forwards;
+    }
+    #boot.done {
+        animation: none;
+        opacity: 0;
+        transition: opacity 0.25s ease;
+        pointer-events: none;
+    }
+    @keyframes boot-in {
+        to {
+            opacity: 1;
+        }
+    }
+    .boot-window {
+        min-width: 260px;
+        padding: 3px;
+        background: #009631;
+        border: 1px solid #00280d;
+        border-radius: 3px;
+        box-shadow: inset 2px 2px 0 #a5d739, inset -2px -2px 0 #004918,
+            4px 4px 0 rgba(0, 0, 0, 0.35);
+        font: 700 13px/1.4 "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Verdana, sans-serif;
+        color: #f7fbf7;
+        text-shadow: 1px 1px 0 #004918;
+    }
+    .boot-title {
+        padding: 4px 6px;
+        margin-bottom: 8px;
+        background: #004918;
+        color: #a5d739;
+        letter-spacing: 1px;
+    }
+    .boot-content {
+        padding: 6px 10px 12px;
+    }
+    .boot-text {
+        margin-bottom: 8px;
+        white-space: nowrap;
+    }
+    #boot.error .boot-text {
+        color: #ffa600;
+        white-space: normal;
+    }
+    .boot-bar {
+        height: 14px;
+        padding: 2px;
+        background: #008229;
+        border: 1px solid #004918;
+        box-shadow: inset 1px 1px 0 #004918, inset -1px -1px 0 #73cb21;
+    }
+    .boot-fill {
+        width: 40%;
+        height: 100%;
+        background: repeating-linear-gradient(90deg, #a5d739 0 8px, #73cb21 8px 16px);
+        animation: boot-slide 1.1s linear infinite;
+    }
+    #boot.error .boot-fill {
+        animation: none;
+        width: 100%;
+        background: #ffa600;
+    }
+    @keyframes boot-slide {
+        from {
+            margin-left: -40%;
+        }
+        to {
+            margin-left: 100%;
+        }
     }
     .mobile-keyboard-toggle {
         display: none;
@@ -70,5 +155,13 @@
         }
     }
 </style>
-<script src="coi-serviceworker.min.js"></script>
+<div id="boot" role="progressbar" aria-label="Loading">
+    <div class="boot-window">
+        <div class="boot-title">LEMONADE</div>
+        <div class="boot-content">
+            <div class="boot-text">Loading…</div>
+            <div class="boot-bar"><div class="boot-fill"></div></div>
+        </div>
+    </div>
+</div>
 <script type="module" src="host.js"></script>

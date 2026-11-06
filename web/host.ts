@@ -233,6 +233,46 @@ class Host implements exe.WasmHost {
     document.body.appendChild(toggle);
   }
 
+  /// Called by the worker as loading progresses, for the boot screen.
+  boot_status(text: string) {
+    const el = document.querySelector("#boot .boot-text");
+    if (el) el.textContent = text;
+  }
+
+  /// Show a failure instead of leaving the loading screen up forever.
+  boot_error(text: string) {
+    const boot = document.getElementById("boot");
+    if (!boot) return;
+    boot.classList.add("error");
+    const el = boot.querySelector(".boot-text");
+    if (el) el.textContent = `Could not start: ${text}`;
+  }
+
+  private bootFinished = false;
+
+  /// Drop the loading screen once the game has drawn its first frame.
+  private finishBoot() {
+    if (this.bootFinished) return;
+    this.bootFinished = true;
+    const boot = document.getElementById("boot");
+    if (boot) {
+      requestAnimationFrame(() => {
+        boot.classList.add("done");
+        setTimeout(() => boot.remove(), 300);
+      });
+    }
+    this.registerServiceWorker();
+  }
+
+  /// Keep the page available offline and make it installable.
+  private registerServiceWorker() {
+    if (!(import.meta as any).env?.PROD) return;
+    navigator.serviceWorker
+      ?.register("./sw.js")
+      .then(() => navigator.storage?.persist?.())
+      .catch((e) => console.warn("service worker", e));
+  }
+
   onMessage(e: MessageEvent<exe.Msg>) {
     const msg = e.data;
     const ret = (this as any)[msg.func](...msg.args);
@@ -294,6 +334,7 @@ class Host implements exe.WasmHost {
   render(_window_id: number, surface_id: number) {
     const surface = this.surfaces.get(surface_id)!;
     this.window_!.getContext("2d")!.drawImage(surface, 0, 0);
+    this.finishBoot();
   }
 
   set_pixels(id: number, ptr: number, len: number): number {
@@ -429,7 +470,30 @@ function loadSaves(prefix: string): [string, Uint8Array][] {
   return saves;
 }
 
+/// When the server does not send the cross-origin isolation headers, the
+/// service worker can add them. Register it and reload once so the document
+/// itself is isolated.
+async function ensureCrossOriginIsolated() {
+  const flag = "lemonade:reload-for-isolation";
+  if (window.crossOriginIsolated) {
+    sessionStorage.removeItem(flag);
+    return;
+  }
+  const sw = navigator.serviceWorker;
+  if (!(import.meta as any).env?.PROD || !sw || !window.isSecureContext) return;
+  if (sessionStorage.getItem(flag)) return;
+  sessionStorage.setItem(flag, "1");
+  try {
+    await sw.register("./sw.js");
+    await sw.ready;
+    location.reload();
+  } catch (e) {
+    console.warn("service worker", e);
+  }
+}
+
 async function main() {
+  await ensureCrossOriginIsolated();
   if (!window.SharedArrayBuffer) {
     document.body.innerText = "SharedArrayBuffer is not supported; possibly try reloading";
     return;
