@@ -82,7 +82,7 @@ pub fn StretchBlt(
         bmp_src.read_pixels(
             &pixels_src,
             if bmp_src.is_bottom_up {
-                hSrc - y_src - 1
+                bmp_src.height - y_src - 1
             } else {
                 y_src
             },
@@ -105,6 +105,26 @@ pub fn CreateCompatibleBitmap(ctx: &mut Context, _hdc: HDC, cx: i32, cy: i32) ->
         .process_heap
         .alloc(&mut ctx.memory, w * h * 4);
     let bitmap = Bitmap::new_simple(w, h, pixels);
+    gdi32::lock().new_bitmap_handle(bitmap).0
+}
+
+#[win32_derive::dllexport]
+pub fn CreateDIBSection(
+    ctx: &mut Context,
+    _hdc: HDC,
+    pbmi: Ptr<u8>, /* BITMAPINFO */
+    _usage: u32,   /* DIB_USAGE */
+    ppvBits: Ptr<u32>,
+    _hSection: u32,
+    _offset: u32,
+) -> HBITMAP {
+    let (mut bitmap, _) = Bitmap::parse(&ctx.memory[pbmi.addr..]);
+    let size = bitmap.stride() * bitmap.height;
+    bitmap.pixels = kernel32::lock().process_heap.alloc(&mut ctx.memory, size);
+    log::info!("CreateDIBSection: {bitmap:?}");
+    if ppvBits.addr != 0 {
+        ppvBits.write(&mut ctx.memory, bitmap.pixels);
+    }
     gdi32::lock().new_bitmap_handle(bitmap).0
 }
 

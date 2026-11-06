@@ -1,0 +1,15 @@
+[package]
+name = "lemonade"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "lemonade_lib"
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+runtime = { workspace = true }
+winapi = { workspace = true }
+
+[target.'cfg(target_family = "wasm")'.dependencies]
+wasm-bindgen = { workspace = true }

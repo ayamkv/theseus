@@ -1,4 +1,5 @@
 mod dialog;
+mod extra;
 mod input;
 mod message;
 mod misc;
@@ -12,6 +13,7 @@ use std::{
 };
 
 pub use dialog::*;
+pub use extra::*;
 pub use input::*;
 pub use message::*;
 pub use misc::*;

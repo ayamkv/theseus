@@ -87,6 +87,8 @@ pub struct Bitmap {
     pub bit_count: u8,
     pub palette: Box<[COLORREF]>,
     pub pixels: u32,
+    /// For 16bpp images: 5-6-5 rather than the default 5-5-5 channel layout.
+    pub is_565: bool,
 }
 
 impl std::fmt::Debug for Bitmap {
@@ -114,6 +116,7 @@ impl Bitmap {
             bit_count: 32,
             palette: Box::new([]),
             pixels,
+            is_565: false,
         }
     }
 
@@ -178,13 +181,22 @@ impl Bitmap {
             bit_count: header.bcBitCount as u8,
             palette,
             pixels: 0,
+            is_565: false,
         };
         (bitmap, pixels)
     }
 
     /// buf is the bytes following the header.
     fn parseBMPv3<'a>(header: &BITMAPINFOHEADER, buf: &'a [u8]) -> (Self, &'a [u8]) {
-        if header.biCompression != BI::RGB as u32 {
+        use zerocopy::FromBytes;
+        let mut buf = buf;
+        let mut is_565 = false;
+        if header.biCompression == BI::BITFIELDS as u32 {
+            let (masks, rest) = <[u32; 3]>::read_from_prefix(buf).unwrap();
+            log::info!("bitfields masks {masks:x?}");
+            is_565 = masks[1] == 0x07e0;
+            buf = rest;
+        } else if header.biCompression != BI::RGB as u32 {
             todo!("compression {:?}", header.biCompression);
         }
         let palette_len = if header.biClrUsed > 0 {
@@ -192,7 +204,7 @@ impl Bitmap {
         } else if header.biBitCount <= 8 {
             2usize.pow(header.biBitCount as u32)
         } else {
-            todo!()
+            0
         };
 
         let (palette, buf) = <[[u8; 4]]>::ref_from_prefix_with_elems(buf, palette_len).unwrap(); // RGBQUAD
@@ -210,6 +222,7 @@ impl Bitmap {
             bit_count: header.biBitCount as u8,
             palette,
             pixels: 0,
+            is_565,
         };
         (bitmap, pixels)
     }
@@ -219,6 +232,38 @@ impl Bitmap {
             32 => {
                 let len = ((x2 - x1) * 4) as usize;
                 dst[..len].copy_from_slice(&pixels[(y * self.stride() + x1 * 4) as usize..][..len]);
+            }
+            24 => {
+                let src = &pixels[(y * self.stride()) as usize..];
+                for (srci, dsti) in (x1..x2).zip((0..).step_by(4)) {
+                    let [b, g, r] = src[srci as usize * 3..][..3] else {
+                        unreachable!()
+                    };
+                    dst[dsti..][..4].copy_from_slice(&[r, g, b, 0xff]);
+                }
+            }
+            16 => {
+                let src = &pixels[(y * self.stride()) as usize..];
+                let expand5 = |v: u16| ((v << 3) | (v >> 2)) as u8;
+                let expand6 = |v: u16| ((v << 2) | (v >> 4)) as u8;
+                for (srci, dsti) in (x1..x2).zip((0..).step_by(4)) {
+                    let i = srci as usize * 2;
+                    let p = u16::from_le_bytes([src[i], src[i + 1]]);
+                    let rgb = if self.is_565 {
+                        [
+                            expand5(p >> 11),
+                            expand6((p >> 5) & 0x3f),
+                            expand5(p & 0x1f),
+                        ]
+                    } else {
+                        [
+                            expand5((p >> 10) & 0x1f),
+                            expand5((p >> 5) & 0x1f),
+                            expand5(p & 0x1f),
+                        ]
+                    };
+                    dst[dsti..][..4].copy_from_slice(&[rgb[0], rgb[1], rgb[2], 0xff]);
+                }
             }
             8 => {
                 let src = &pixels[(y * self.stride()) as usize..];

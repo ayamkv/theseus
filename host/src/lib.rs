@@ -95,6 +95,18 @@ pub fn set_trace(spec: &str) {
     *TRACE_SPEC.lock().unwrap() = spec.to_string();
 }
 
+/// Milliseconds since the Unix epoch.
+#[cfg(not(target_family = "wasm"))]
+pub fn unix_time_ms() -> u64 {
+    let now = std::time::SystemTime::now();
+    now.duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64
+}
+
+#[cfg(target_family = "wasm")]
+pub fn unix_time_ms() -> u64 {
+    js_sys::Date::now() as u64
+}
+
 pub fn init() {
     logger::init();
     LazyLock::force(&HOST);

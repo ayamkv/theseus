@@ -8,21 +8,26 @@ pub mod ddraw;
 pub mod dinput;
 mod dllexport;
 pub mod dsound;
+pub mod fmod;
 pub mod gdi32;
 mod handle;
 mod heap;
 pub mod kernel32;
+pub mod libmysql;
 mod locked_state;
 pub mod msacm32;
 pub mod msvcrt;
 pub mod ole32;
 mod point;
 mod ptr;
+pub mod rapi;
 mod rect;
+mod registry;
 pub mod shell32;
 pub mod trace;
 pub mod user32;
 pub mod winmm;
+pub mod ws2_32;
 
 /// Functions a program may resolve at runtime with LoadLibrary/GetProcAddress
 /// instead of importing statically. The translator reserves a callable address

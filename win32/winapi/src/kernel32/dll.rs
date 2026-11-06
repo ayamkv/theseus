@@ -96,15 +96,19 @@ pub fn register_export(dll: &str, func: &str, addr: u32) {
 
 #[win32_derive::dllexport]
 pub fn GetModuleFileNameA(
-    _ctx: &mut Context,
+    ctx: &mut Context,
     _hModule: HMODULE,
-    _lpFilename: Ptr<u8>,
-    _nSize: u32,
+    lpFilename: Ptr<u8>,
+    nSize: u32,
 ) -> u32 {
-    /*
-    get_module_file_name(sys, hModule, &mut EncoderAnsi::new(&mut filename))
-    */
-    stub!(0)
+    // C:\\ maps to the initial working directory (see resolve_path).
+    let name = b"C:\\Lemonade.exe";
+    if (nSize as usize) <= name.len() {
+        return 0;
+    }
+    ctx.memory[lpFilename.addr..][..name.len()].copy_from_slice(name);
+    ctx.memory.write::<u8>(lpFilename.addr + name.len() as u32, 0);
+    name.len() as u32
 }
 
 #[win32_derive::dllexport]

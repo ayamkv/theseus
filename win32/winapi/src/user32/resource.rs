@@ -110,6 +110,44 @@ pub fn LoadMenuW(
     stub!(0)
 }
 
+#[win32_derive::dllexport]
+pub fn LoadBitmapA(ctx: &mut Context, _hInstance: HINSTANCE, lpBitmapName: Ptr<u8>) -> HANDLE {
+    assert!(is_intresource(lpBitmapName.addr));
+    let Some(buf) = kernel32::lock().find_resource(
+        ctx,
+        exe::ResourceName::Id(exe::RT::BITMAP as u32),
+        exe::ResourceName::Id(lpBitmapName.addr),
+    ) else {
+        log::warn!("LoadBitmapA: resource not found");
+        return HANDLE::null();
+    };
+    let (mut bitmap, pixels) = gdi32::Bitmap::parse(buf);
+    bitmap.pixels = unsafe { pixels.as_ptr().offset_from_unsigned(ctx.memory.as_ptr()) } as u32;
+    gdi32::lock().new_bitmap_handle(bitmap).0
+}
+
+#[win32_derive::dllexport]
+pub fn LoadStringA(
+    ctx: &mut Context,
+    _hInstance: HINSTANCE,
+    uID: u32,
+    lpBuffer: Ptr<u8>,
+    cchBufferMax: i32,
+) -> i32 {
+    if cchBufferMax <= 0 {
+        return 0;
+    }
+    let text: Vec<u8> = match find_string(ctx, uID) {
+        // ANSI text only: each UTF-16 unit maps to its low byte.
+        Some(bytes) => bytes.chunks_exact(2).map(|c| c[0]).collect(),
+        None => Vec::new(),
+    };
+    let n = text.len().min(cchBufferMax as usize - 1);
+    ctx.memory[lpBuffer.addr..][..n].copy_from_slice(&text[..n]);
+    ctx.memory.write::<u8>(lpBuffer.addr + n as u32, 0);
+    n as i32
+}
+
 fn find_string(ctx: &Context, uID: u32) -> Option<&[u8]> {
     // Strings are stored as blocks of 16 consecutive strings.
     let (resource_id, index) = ((uID >> 4) + 1, uID & 0xF);

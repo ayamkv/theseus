@@ -1,4 +1,10 @@
-use std::{arch::wasm32, sync::Mutex};
+use std::{
+    arch::wasm32,
+    sync::{
+        Mutex,
+        atomic::{AtomicU32, Ordering},
+    },
+};
 
 use web_sys::wasm_bindgen::prelude::*;
 
@@ -64,23 +70,36 @@ impl Window {
     }
 }
 
-pub struct AudioStream {}
+/// Audio goes to the page, which schedules it with Web Audio.
+pub struct AudioStream {
+    spec: host::AudioSpec,
+    /// `Host::time` at which everything sent so far will have played.
+    end_ms: AtomicU32,
+}
+
 impl AudioStream {
-    /// No audio in the wasm host yet; see the web front end.
     pub fn is_open(&self) -> bool {
-        false
+        true
     }
 
     pub fn queued_bytes(&self) -> u32 {
-        todo!()
-    }
-    pub fn put_data(&self, _data: &[u8]) {
-        todo!()
+        let now = host::host().time();
+        let remaining = self.end_ms.load(Ordering::Relaxed).saturating_sub(now);
+        remaining * self.spec.sample_rate / 1000 * self.spec.channels * 2
     }
 
-    pub fn resume(&self) {
-        todo!()
+    pub fn put_data(&self, data: &[u8]) {
+        let queued_ms = host::host().chan.lock().unwrap().play_audio(
+            self.spec.sample_rate,
+            self.spec.channels,
+            data,
+        );
+        // The page adds one because a sync reply must not be zero.
+        let end = host::host().time() + (queued_ms - 1) as u32;
+        self.end_ms.store(end, Ordering::Relaxed);
     }
+
+    pub fn resume(&self) {}
 }
 
 pub struct Host {
@@ -108,8 +127,11 @@ impl Host {
         Window::new(title, width, height)
     }
 
-    pub fn create_audio_stream(&self, _spec: host::AudioSpec) -> AudioStream {
-        todo!()
+    pub fn create_audio_stream(&self, spec: host::AudioSpec) -> AudioStream {
+        AudioStream {
+            spec,
+            end_ms: AtomicU32::new(0),
+        }
     }
 
     pub fn time(&self) -> u32 {
@@ -169,6 +191,8 @@ export interface WasmHost {
 
     write_file(path: string, ptr: number, len: number): number;
 
+    play_audio(rate: number, channels: number, ptr: number, len: number): number;
+
     poll_message(): number[];
     wait_message(): Promise<number[]>;
 }
@@ -227,6 +251,15 @@ impl WebHostSendChannel {
         args.push(&JsValue::from(data.as_ptr() as u32));
         args.push(&JsValue::from(data.len()));
         self.send_sync("write_file", args);
+    }
+
+    pub fn play_audio(&mut self, rate: u32, channels: u32, data: &[u8]) -> i32 {
+        let args = js_sys::Array::new();
+        args.push(&JsValue::from(rate));
+        args.push(&JsValue::from(channels));
+        args.push(&JsValue::from(data.as_ptr() as u32));
+        args.push(&JsValue::from(data.len()));
+        self.send_sync("play_audio", args)
     }
 
     pub fn set_pixels(&mut self, id: i32, pixels: &[u8]) {

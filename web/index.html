@@ -1,12 +1,46 @@
 <!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <style>
+    html,
+    body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        /* The game window is a fixed-size canvas; scale it to the screen
+           instead of letting it make the page scroll. */
+        overflow: hidden;
+        background: #000;
+    }
     .window {
         border: solid 1px black;
         position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 100vw;
+        max-height: 100vh;
+        image-rendering: pixelated;
+        touch-action: manipulation;
     }
     canvas {
-        image-rendering: crisp-edges;
+        image-rendering: pixelated;
+    }
+    .mobile-keyboard-toggle {
+        display: none;
+        position: fixed;
+        right: 12px;
+        bottom: calc(12px + env(safe-area-inset-bottom));
+        z-index: 10;
+        min-width: 48px;
+        min-height: 48px;
+        font-size: 22px;
+        cursor: pointer;
+    }
+    /* Phones and tablets only; a desktop has a real keyboard. */
+    @media (pointer: coarse) {
+        .mobile-keyboard-toggle {
+            display: block;
+        }
     }
 </style>
 <script src="coi-serviceworker.min.js"></script>

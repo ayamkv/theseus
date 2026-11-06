@@ -359,6 +359,7 @@ pub fn PeekMessageA(
         1 => true,    // PM_REMOVE
         _ => todo!(), // e.g. PM_NOYIELD
     };
+    crate::fmod::pump();
     // Games poll for messages every frame; keep the audio mixer fed from here
     // too, in case the app renders without flipping.
     crate::dsound::pump(ctx);

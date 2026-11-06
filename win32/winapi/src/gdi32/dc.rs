@@ -4,7 +4,7 @@ use runtime::Context;
 
 use crate::{
     HANDLE, POINT, Ptr,
-    gdi32::{self, Bitmap, COLORREF, HBITMAP, HPEN, Pen, State},
+    gdi32::{self, Bitmap, Brush, COLORREF, HBITMAP, HBRUSH, HPEN, Pen, State},
     stub,
 };
 
@@ -26,6 +26,7 @@ pub struct DC {
     /// Store the HBITMAP as well as the Bitmap itself so that when it is switched via SelectObject we can return it.
     pub bitmap: (HBITMAP, Arc<Bitmap>),
     pub pen: (HPEN, Pen),
+    pub brush: (HBRUSH, Brush),
     rop2: R2,
     pos: POINT,
 }
@@ -35,6 +36,7 @@ impl DC {
         DC {
             bitmap: (hbitmap, bitmap),
             pen: (HPEN::null(), Pen(COLORREF::default())),
+            brush: (HBRUSH::null(), Brush(COLORREF::from_rgb(0xff, 0xff, 0xff))),
             rop2: R2::COPYPEN,
             pos: POINT::default(),
         }
@@ -55,6 +57,7 @@ pub fn CreateCompatibleDC(_ctx: &mut Context, hdc: HDC) -> HDC {
         bit_count: 1,
         palette: Box::new([COLORREF::default()]),
         pixels: 0,
+        is_565: false,
     };
     let new_hdc = gdi32::lock().new_memory_dc(bitmap);
     if hdc.is_null() {
@@ -147,6 +150,28 @@ pub fn MoveToEx(ctx: &mut Context, hdc: HDC, x: i32, y: i32, lppt: Ptr<POINT>) -
     dc.pos = POINT { x, y };
     if lppt.addr != 0 {
         lppt.write(&mut ctx.memory, dc.pos).unwrap();
+    }
+    true
+}
+
+#[win32_derive::dllexport]
+pub fn Rectangle(ctx: &mut Context, hdc: HDC, left: i32, top: i32, right: i32, bottom: i32) -> bool {
+    let state = gdi32::lock();
+    let dc = state.dcs.get(hdc).unwrap();
+    let bitmap = dc.bitmap();
+    if !bitmap.is_simple() {
+        log::warn!("Rectangle: unsupported target {bitmap:?}");
+        return true;
+    }
+    let pixel = dc.brush.1.0.to_pixel();
+    let stride = bitmap.stride() as usize;
+    let (width, height) = (bitmap.width as i32, bitmap.height as i32);
+    let pixels = bitmap.pixels_mut(&mut ctx.memory);
+    for y in top.max(0)..bottom.min(height) {
+        for x in left.max(0)..right.min(width) {
+            let i = y as usize * stride + x as usize * 4;
+            pixels[i..][..4].copy_from_slice(&pixel);
+        }
     }
     true
 }

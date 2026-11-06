@@ -72,6 +72,11 @@ pub fn GetObjectA(ctx: &mut Context, handle: HGDIOBJ, size: u32, lpOut: Ptr<BITM
     size
 }
 
+#[win32_derive::dllexport]
+pub fn CreateSolidBrush(_ctx: &mut Context, color: COLORREF) -> gdi32::HBRUSH {
+    gdi32::lock().objects.add(Object::Brush(Brush(color)))
+}
+
 #[derive(Debug, win32_derive::ABIEnum)]
 pub enum GetStockObjectArg {
     WHITE_BRUSH = 0,
@@ -109,7 +114,6 @@ pub fn GetStockObject(_ctx: &mut Context, i: GetStockObjectArg) -> HGDIOBJ {
 #[win32_derive::dllexport]
 pub fn SelectObject(_ctx: &mut Context, hdc: HDC, h: HGDIOBJ) -> HGDIOBJ {
     if h.is_null_or_invalid() {
-        log::warn!("SelectObject: ignoring null select, likely from a prior stub");
         return HGDIOBJ::null();
     }
     let state = &mut *gdi32::lock();
@@ -126,6 +130,10 @@ pub fn SelectObject(_ctx: &mut Context, hdc: HDC, h: HGDIOBJ) -> HGDIOBJ {
             dc.pen = (h, pen.clone());
             prev
         }
-        _ => todo!(),
+        Object::Brush(brush) => {
+            let prev = dc.brush.0;
+            dc.brush = (h, brush.clone());
+            prev
+        }
     }
 }

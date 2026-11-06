@@ -6,18 +6,29 @@ import type * as exe from "./exe/basicdd/basicdd.js";
   self.postMessage(obj);
 };
 
-async function run(name: string, memory: WebAssembly.Memory) {
+async function run(start: StartMessage) {
+  const { name, memory, files = [], cwd, saves } = start;
   const exe = await import(`./exe/${name}/${name}.js`);
   await exe.default(/* module */ undefined, memory);
+  for (const file of files) {
+    const response = await fetch(new URL(`.${cwd}/${file}`, self.location.origin + "/"));
+    if (!response.ok) throw new Error(`could not fetch ${file}`);
+    exe.mount_file(`${cwd}/${file}`, new Uint8Array(await response.arrayBuffer()));
+  }
+  // Saved files win over the shipped ones.
+  for (const [path, data] of saves) exe.mount_file(path, data);
+  if (cwd) exe.set_current_dir(cwd);
   exe.main();
 }
 
 export interface StartMessage {
   name: string;
   memory: WebAssembly.Memory;
+  files?: string[];
+  cwd?: string;
+  saves: [string, Uint8Array][];
 }
 
 self.onmessage = (e: MessageEvent<StartMessage>) => {
-  const { name, memory } = e.data;
-  run(name, memory).catch((e) => console.error(e));
+  run(e.data).catch((e) => console.error(e));
 };

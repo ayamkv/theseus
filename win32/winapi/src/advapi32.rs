@@ -2,14 +2,11 @@ use runtime::Context;
 
 use crate::stub;
 
+pub use crate::registry::*;
+
 pub type HKEY = u32;
 
 const ERROR_FILE_NOT_FOUND: u32 = 2;
-
-#[win32_derive::dllexport]
-pub fn RegCloseKey(_ctx: &mut Context, _hKey: HKEY) -> u32 /* WIN32_ERROR */ {
-    stub!(0)
-}
 
 #[win32_derive::dllexport]
 pub fn GetUserNameA(
@@ -42,31 +39,6 @@ pub fn RegCreateKeyExW(
     _lpdwDisposition: u32, /* REG_CREATE_KEY_DISPOSITION */
 ) -> u32 /* WIN32_ERROR */ {
     stub!(0)
-}
-
-#[win32_derive::dllexport]
-pub fn RegOpenKeyExA(
-    _ctx: &mut Context,
-    _hKey: HKEY,
-    _lpSubKey: u32, /* STR */
-    _ulOptions: u32,
-    _samDesired: u32, /* REG_SAM_FLAGS */
-    _phkResult: HKEY,
-) -> u32 /* WIN32_ERROR */ {
-    stub!(0)
-}
-
-#[win32_derive::dllexport]
-pub fn RegQueryValueExA(
-    _ctx: &mut Context,
-    _hKey: HKEY,
-    _lpValueName: u32, /* STR */
-    _lpReserved: u32,
-    _lpType: u32, /* REG_VALUE_TYPE */
-    _lpData: u32,
-    _lpcbData: u32,
-) -> u32 /* WIN32_ERROR */ {
-    stub!(ERROR_FILE_NOT_FOUND)
 }
 
 #[win32_derive::dllexport]
