@@ -104,6 +104,19 @@ class MessageQueue {
     );
   }
 
+  /// Enqueue a mouse event at explicit game coordinates, for the portrait view.
+  sendMouse(
+    type: "mousedown" | "mouseup" | "mousemove",
+    x: number,
+    y: number,
+    button = 0,
+    buttons = 0,
+  ) {
+    const event = new MouseEvent(type, { button, buttons, bubbles: true, cancelable: true });
+    (event as any).theseusPoint = [x, y];
+    this.enqueue(event);
+  }
+
   wait(): Promise<Event> {
     const msg = this.poll();
     if (msg !== undefined) {
@@ -169,7 +182,20 @@ class Host implements exe.WasmHost {
   private pendingKeys: { code: string; shift: boolean }[] = [];
   private sendingKey = false;
 
-  constructor(public wasmMemory: WebAssembly.Memory, public savePrefix: string) {
+  /// Optional portrait recompose view over the 640x480 game frame.
+  portrait: boolean;
+  debug: boolean;
+  private stage: HTMLCanvasElement | undefined;
+  private stageCtx: CanvasRenderingContext2D | undefined;
+  private stagePointer: number | undefined;
+
+  constructor(
+    public wasmMemory: WebAssembly.Memory,
+    public savePrefix: string,
+    options: { portrait?: boolean; debug?: boolean } = {},
+  ) {
+    this.portrait = options.portrait ?? false;
+    this.debug = options.debug ?? false;
     this.consoleDom.id = "console";
     document.body.appendChild(this.consoleDom);
     // Browsers only allow audio to start from a user gesture.
@@ -416,7 +442,116 @@ class Host implements exe.WasmHost {
     document.body.appendChild(this.window_);
     this.windowCtx = this.window_.getContext("2d")!;
     this.messageQueue.listen(this.window_);
+    if (this.portrait) {
+      this.window_.style.display = "none";
+      this.createStage();
+    }
     return 1;
+  }
+
+  /// The visible canvas for the portrait layout; the game still draws into
+  /// the hidden 640x480 window canvas.
+  private createStage() {
+    const stage = document.createElement("canvas");
+    stage.className = "portrait";
+    stage.width = 640;
+    stage.height = 1480;
+    document.body.appendChild(stage);
+    this.stage = stage;
+    this.stageCtx = stage.getContext("2d")!;
+    stage.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      this.stagePointer = e.pointerId;
+      stage.setPointerCapture(e.pointerId);
+      const point = this.stagePoint(e);
+      if (!point) return;
+      this.messageQueue.sendMouse("mousemove", point[0], point[1], 0, 0);
+      this.messageQueue.sendMouse("mousedown", point[0], point[1], 0, 1);
+    });
+    stage.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== this.stagePointer) return;
+      const point = this.stagePoint(e);
+      if (!point) return;
+      this.messageQueue.sendMouse("mousemove", point[0], point[1], 0, 1);
+    });
+    const up = (e: PointerEvent) => {
+      if (e.pointerId !== this.stagePointer) return;
+      this.stagePointer = undefined;
+      const point = this.stagePoint(e);
+      if (point) this.messageQueue.sendMouse("mouseup", point[0], point[1], 0, 0);
+    };
+    stage.addEventListener("pointerup", up);
+    stage.addEventListener("pointercancel", up);
+  }
+
+  /// Convert a pointer event on the stage into game coordinates.
+  private stagePoint(e: PointerEvent): [number, number] | undefined {
+    const stage = this.stage;
+    if (!stage) return undefined;
+    const rect = stage.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return undefined;
+    const x = ((e.clientX - rect.left) * stage.width) / rect.width;
+    const y = ((e.clientY - rect.top) * stage.height) / rect.height;
+    for (const region of this.stageRegions) {
+      const r = region.dst;
+      if (x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
+      const s = region.src;
+      return [
+        Math.round(s.x + ((x - r.x) * s.w) / r.w),
+        Math.round(s.y + ((y - r.y) * s.h) / r.h),
+      ];
+    }
+    return undefined;
+  }
+
+  /// Regions of the game frame shown on the portrait stage.
+  private stageRegions: { src: { x: number; y: number; w: number; h: number }; dst: { x: number; y: number; w: number; h: number } }[] = [];
+
+  /// The in-progress day has a bright SKIP button in the view's corner.
+  private isDayScreen(): boolean {
+    const ctx = this.windowCtx;
+    if (!ctx) return false;
+    const glyph = ctx.getImageData(610, 355, 1, 1).data;
+    const face = ctx.getImageData(600, 350, 1, 1).data;
+    const white = glyph[0]! > 230 && glyph[1]! > 230 && glyph[2]! > 230;
+    const green = face[1]! > 150 && face[0]! < 160 && face[2]! < 100;
+    return white && green;
+  }
+
+  /// Lay the day screen out as a tall 9:16-ish page.
+  private composePortrait() {
+    const ctx = this.stageCtx;
+    const game = this.window_;
+    if (!ctx || !game) return;
+    ctx.imageSmoothingEnabled = false;
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    if (!this.isDayScreen()) {
+      // Unknown screen: show the whole frame, centered.
+      this.stageRegions = [
+        { src: { x: 0, y: 0, w: 640, h: 480 }, dst: { x: 0, y: 460, w: 640, h: 480 } },
+      ];
+    } else {
+      this.stageRegions = [
+        { src: { x: 0, y: 0, w: 640, h: 30 }, dst: { x: 0, y: 0, w: 640, h: 40 } },
+        { src: { x: 330, y: 40, w: 300, h: 75 }, dst: { x: 0, y: 48, w: 640, h: 160 } },
+        { src: { x: 330, y: 125, w: 300, h: 250 }, dst: { x: 0, y: 220, w: 640, h: 533 } },
+        { src: { x: 5, y: 125, w: 315, h: 112 }, dst: { x: 0, y: 765, w: 640, h: 228 } },
+        { src: { x: 5, y: 240, w: 315, h: 225 }, dst: { x: 0, y: 1000, w: 640, h: 457 } },
+      ];
+    }
+    for (const region of this.stageRegions) {
+      const s = region.src;
+      const d = region.dst;
+      ctx.drawImage(game, s.x, s.y, s.w, s.h, d.x, d.y, d.w, d.h);
+    }
+    if (this.debug) {
+      ctx.strokeStyle = "red";
+      ctx.lineWidth = 2;
+      for (const region of this.stageRegions) {
+        const d = region.dst;
+        ctx.strokeRect(d.x, d.y, d.w, d.h);
+      }
+    }
   }
 
   resize_window(_id: number, width: number, height: number): void {
@@ -428,6 +563,7 @@ class Host implements exe.WasmHost {
     const surface = this.surfaces.get(surface_id)!;
     this.windowCtx!.drawImage(surface.canvas, 0, 0);
     this.coverBanners();
+    if (this.portrait) this.composePortrait();
     this.finishBoot();
   }
 
@@ -497,7 +633,8 @@ class Host implements exe.WasmHost {
         // MouseEvent.buttons has right and middle swapped relative to button numbers.
         const b = e.buttons;
         const held = (b & 1) | ((b & 2) << 1) | ((b & 4) >> 1);
-        const [x, y] = this.canvasCoords(e);
+        const [x, y] =
+          (e as any).theseusPoint ?? this.canvasCoords(e);
         return [typeToCode[e.type]!, x, y, (1 << e.button) | (held << 16)];
       }
       case "keydown":
@@ -624,7 +761,10 @@ async function main() {
   const name = params.get("exe") ?? "mine";
   const savePrefix = `theseus:${name}:`;
 
-  const host = new Host(memory, savePrefix);
+  const host = new Host(memory, savePrefix, {
+    portrait: params.get("ui") === "portrait",
+    debug: params.get("debug") === "1",
+  });
   (window as any).theseusHost = host;
   const worker = new Worker(new URL("./worker.js", import.meta.url), { type: "module" });
   worker.onmessage = (e) => host.onMessage(e);

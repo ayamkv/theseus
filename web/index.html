@@ -29,6 +29,18 @@
         image-rendering: pixelated;
         touch-action: manipulation;
     }
+    /* Portrait recompose view: a tall stage fitted to the screen. */
+    .portrait {
+        position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);
+        max-width: 100vw;
+        max-height: 100vh;
+        max-height: 100dvh;
+        image-rendering: pixelated;
+        touch-action: none;
+    }
     canvas {
         image-rendering: pixelated;
     }
