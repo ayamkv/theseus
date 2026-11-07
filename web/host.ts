@@ -383,6 +383,13 @@ class Host implements exe.WasmHost {
     this.consoleDom.innerText = this.consoleOutput;
   }
 
+  /// Log lines from the worker, mirrored into the page's console pane.
+  console_line(text: string) {
+    if (this.consoleOutput.length > 200000) return;
+    this.consoleOutput += `${text}\n`;
+    this.consoleDom.innerText = this.consoleOutput;
+  }
+
   create_surface(width: number, height: number): number {
     const canvas = document.createElement("canvas");
     canvas.width = width;
@@ -420,7 +427,30 @@ class Host implements exe.WasmHost {
   render(_window_id: number, surface_id: number) {
     const surface = this.surfaces.get(surface_id)!;
     this.windowCtx!.drawImage(surface.canvas, 0, 0);
+    this.coverBanners();
     this.finishBoot();
+  }
+
+  /// The menu draws two ad banners over the header. When they are present,
+  /// paint the header's own striped background over them.
+  private coverBanners() {
+    const ctx = this.windowCtx;
+    const canvas = this.window_;
+    if (!ctx || !canvas) return;
+    const left = { x: 120, y: 2, w: 144, h: 42 };
+    const right = { x: 348, y: 0, w: 228, h: 47 };
+    const sample = ctx.getImageData(left.x + 70, left.y + 20, 1, 1).data;
+    const orange = sample[0]! > 180 && sample[1]! > 70 && sample[2]! < 120;
+    if (!orange) return;
+    // Repeat a banner-free slice of the header across the banner area.
+    const srcX = 275;
+    const srcW = 36;
+    for (const rect of [left, right]) {
+      for (let x = rect.x; x < rect.x + rect.w; x += srcW) {
+        const w = Math.min(srcW, rect.x + rect.w - x);
+        ctx.drawImage(canvas, srcX, 0, w, rect.h, x, rect.y, w, rect.h);
+      }
+    }
   }
 
   set_pixels(id: number, ptr: number, len: number): number {
@@ -610,6 +640,7 @@ async function main() {
     name,
     memory,
     saves: loadSaves(savePrefix),
+    trace: params.get("trace") ?? undefined,
   };
   worker.postMessage(message);
 }

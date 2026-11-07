@@ -1,6 +1,20 @@
 // Note that the specific exe here doesn't matter, we just need the same types found in all of them.
 import type * as exe from "./exe/basicdd/basicdd.js";
 
+// Mirror the guest's log output into the page's console pane. Handy when
+// debugging without devtools; the pane is otherwise only for program output.
+for (const level of ["log", "info", "warn", "error"] as const) {
+  const original = console[level];
+  (console as any)[level] = (...args: unknown[]) => {
+    original.apply(console, args);
+    self.postMessage({
+      func: "console_line",
+      args: [args.map((a) => String(a)).join(" ")],
+      retAddr: 0,
+    });
+  };
+}
+
 (self as any).send_to_host = (func: string, args: any[], retAddr: number) => {
   const obj: exe.Msg = { func, args, retAddr };
   self.postMessage(obj);
@@ -32,6 +46,7 @@ async function run(start: StartMessage) {
   // Saved files win over the shipped ones.
   for (const [path, data] of saves) exe.mount_file(path, data);
   if (cwd) exe.set_current_dir(cwd);
+  if (start.trace) exe.set_trace(start.trace);
   bootStatus("Starting…");
   exe.main();
 }
@@ -42,6 +57,8 @@ export interface StartMessage {
   files?: string[];
   cwd?: string;
   saves: [string, Uint8Array][];
+  /// THESEUS_TRACE-style spec, set from the page's ?trace= parameter.
+  trace?: string | undefined;
 }
 
 self.onmessage = (e: MessageEvent<StartMessage>) => {
