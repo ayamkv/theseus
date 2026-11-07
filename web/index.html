@@ -155,6 +155,66 @@
             display: grid;
         }
     }
+    .saves-toggle {
+        position: fixed;
+        right: 12px;
+        bottom: calc(68px + env(safe-area-inset-bottom));
+        z-index: 10;
+        width: 56px;
+        height: 40px;
+        padding: 0;
+        appearance: none;
+        cursor: pointer;
+        color: #f7fbf7;
+        background: #18ae31;
+        border: 1px solid #00280d;
+        border-radius: 3px;
+        box-shadow: inset 2px 2px 0 #a5d739, inset -2px -2px 0 #004918,
+            2px 2px 0 rgba(0, 0, 0, 0.45);
+        font: 700 10px/1 "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Verdana, sans-serif;
+        text-shadow: 1px 1px 0 #004918;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-tap-highlight-color: transparent;
+    }
+    .saves-toggle:active {
+        background: #009631;
+        box-shadow: inset 2px 2px 0 #004918, inset -2px -2px 0 #73cb21;
+    }
+    .saves-panel {
+        display: none;
+        position: fixed;
+        right: 12px;
+        bottom: calc(116px + env(safe-area-inset-bottom));
+        z-index: 10;
+        flex-direction: column;
+        gap: 6px;
+        padding: 6px;
+        background: #009631;
+        border: 1px solid #00280d;
+        border-radius: 3px;
+        box-shadow: inset 2px 2px 0 #a5d739, inset -2px -2px 0 #004918,
+            4px 4px 0 rgba(0, 0, 0, 0.35);
+        font: 700 12px "MS Sans Serif", "Microsoft Sans Serif", Tahoma, Verdana, sans-serif;
+    }
+    .saves-panel.open {
+        display: flex;
+    }
+    .saves-panel button {
+        min-width: 128px;
+        padding: 6px 10px;
+        color: #f7fbf7;
+        background: #18ae31;
+        border: 1px solid #00280d;
+        border-radius: 2px;
+        box-shadow: inset 2px 2px 0 #a5d739, inset -2px -2px 0 #004918;
+        font: inherit;
+        text-shadow: 1px 1px 0 #004918;
+        cursor: pointer;
+    }
+    .saves-panel button:active {
+        box-shadow: inset 2px 2px 0 #004918, inset -2px -2px 0 #73cb21;
+    }
 </style>
 <div id="boot" role="progressbar" aria-label="Loading">
     <div class="boot-window">

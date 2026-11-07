@@ -180,6 +180,7 @@ class Host implements exe.WasmHost {
     window.addEventListener("pointerdown", unlock);
     window.addEventListener("keydown", unlock);
     this.createMobileKeyboard();
+    this.createSaveMenu();
   }
 
   /// Type text from the on-screen keyboard, as if it came from a real one.
@@ -239,6 +240,76 @@ class Host implements exe.WasmHost {
       this.pressKey("Enter");
     });
     document.body.appendChild(toggle);
+  }
+
+  /// Download the game's save database or restore one from a file. The save is
+  /// the same bytes the guest keeps in localStorage.
+  private createSaveMenu() {
+    const savePath = "/game/Lemonade.dat";
+    const toggle = document.createElement("button");
+    toggle.className = "saves-toggle";
+    toggle.textContent = "SAVE";
+    toggle.title = "Save file";
+    toggle.setAttribute("aria-label", "Save file");
+
+    const panel = document.createElement("div");
+    panel.className = "saves-panel";
+    const exportButton = document.createElement("button");
+    exportButton.textContent = "Export save";
+    const importButton = document.createElement("button");
+    importButton.textContent = "Import save";
+    const file = document.createElement("input");
+    file.type = "file";
+    file.accept = ".dat";
+    file.style.display = "none";
+    panel.append(exportButton, importButton, file);
+
+    toggle.addEventListener("click", () => panel.classList.toggle("open"));
+
+    exportButton.addEventListener("click", async () => {
+      let bytes: Uint8Array;
+      const stored = localStorage.getItem(this.savePrefix + savePath);
+      if (stored) {
+        bytes = Uint8Array.from(atob(stored), (c) => c.charCodeAt(0));
+      } else {
+        // Nothing saved in this browser yet; export the shipped database.
+        const response = await fetch("./game/Lemonade.dat");
+        if (!response.ok) {
+          window.alert("No save file to export yet.");
+          return;
+        }
+        bytes = new Uint8Array(await response.arrayBuffer());
+      }
+      const url = URL.createObjectURL(
+        new Blob([new Uint8Array(bytes)], { type: "application/octet-stream" }),
+      );
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "Lemonade-save.dat";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      panel.classList.remove("open");
+    });
+
+    importButton.addEventListener("click", () => file.click());
+    file.addEventListener("change", async () => {
+      const chosen = file.files?.[0];
+      file.value = "";
+      if (!chosen) return;
+      if (!window.confirm("Replace the current save with this file?")) return;
+      const bytes = new Uint8Array(await chosen.arrayBuffer());
+      if (bytes.length === 0) {
+        window.alert("That file is empty.");
+        return;
+      }
+      let text = "";
+      for (const b of bytes) text += String.fromCharCode(b);
+      localStorage.setItem(this.savePrefix + savePath, btoa(text));
+      // The guest mounts saved files at startup, so restart it.
+      location.reload();
+    });
+
+    document.body.append(toggle, panel);
   }
 
   /// Called by the worker as loading progresses, for the boot screen.
