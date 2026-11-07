@@ -1,6 +1,6 @@
 // Caches the page and its assets so repeat loads come from disk, and adds the
 // cross-origin isolation headers when the server does not set them.
-const VERSION = "v2";
+const VERSION = "v3";
 const CACHE = `lemonade-${VERSION}`;
 const SHELL = [
   "./index.html",
@@ -52,21 +52,22 @@ self.addEventListener("fetch", (event) => {
   if (request.method !== "GET") return;
   const url = new URL(request.url);
   if (url.origin !== location.origin) return;
-  event.respondWith(request.mode === "navigate" ? page(request, event) : asset(request));
+  event.respondWith(request.mode === "navigate" ? page(request) : asset(request));
 });
 
-/// Serve the cached page immediately and refresh it in the background. Only the
-/// first visit has no cached page and must wait for the network.
-async function page(request, event) {
+/// Network first: a cached page can reference assets a newer deploy removed, so
+/// the cache is only a fallback when the network fails.
+async function page(request) {
   const cache = await caches.open(CACHE);
-  const update = fetch(request).then(async (response) => {
+  try {
+    const response = await fetch(request);
     if (response.ok) await cache.put("./index.html", response.clone());
-    return response;
-  });
-  const cached = await cache.match("./index.html");
-  if (!cached) return isolate(await update);
-  event.waitUntil(update.catch(() => {}));
-  return isolate(cached);
+    return isolate(response);
+  } catch (error) {
+    const cached = await cache.match("./index.html");
+    if (cached) return isolate(cached);
+    throw error;
+  }
 }
 
 /// Cache first: the wasm, game data and hashed assets never change in place.
