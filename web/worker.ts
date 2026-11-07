@@ -13,14 +13,21 @@ function bootStatus(text: string) {
 
 async function run(start: StartMessage) {
   const { name, memory, files = [], cwd, saves } = start;
+  // Fetch the game data alongside the wasm download and compile.
+  const data = files.map(async (file) => {
+    const response = await fetch(new URL(`.${cwd}/${file}`, self.location.origin + "/"));
+    if (!response.ok) throw new Error(`could not fetch ${file}`);
+    return [`${cwd}/${file}`, new Uint8Array(await response.arrayBuffer())] as const;
+  });
+  // The wasm load may fail first; keep an early data failure from being
+  // reported as unhandled before it is awaited below.
+  for (const pending of data) pending.catch(() => {});
   bootStatus("Loading engine…");
   const exe = await import(`./exe/${name}/${name}.js`);
   await exe.default(/* module */ undefined, memory);
   bootStatus("Loading game data…");
-  for (const file of files) {
-    const response = await fetch(new URL(`.${cwd}/${file}`, self.location.origin + "/"));
-    if (!response.ok) throw new Error(`could not fetch ${file}`);
-    exe.mount_file(`${cwd}/${file}`, new Uint8Array(await response.arrayBuffer()));
+  for (const [path, bytes] of await Promise.all(data)) {
+    exe.mount_file(path, bytes);
   }
   // Saved files win over the shipped ones.
   for (const [path, data] of saves) exe.mount_file(path, data);

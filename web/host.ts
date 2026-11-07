@@ -141,15 +141,23 @@ class MessageQueue {
   }
 }
 
+interface Surface {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+  /// Reused across frames so set_pixels does not allocate.
+  imageData: ImageData;
+}
+
 class Host implements exe.WasmHost {
   consoleDom = document.createElement("pre");
   consoleOutputDecoder = new TextDecoder();
   consoleOutput = "";
   window_: HTMLCanvasElement | undefined;
 
-  surfaces: Map<number, HTMLCanvasElement> = new Map();
+  surfaces: Map<number, Surface> = new Map();
   nextSurface = 1;
   messageQueue = new MessageQueue();
+  windowCtx: CanvasRenderingContext2D | undefined;
 
   audio: AudioContext | undefined;
   /// AudioContext time at which scheduled audio runs out.
@@ -305,14 +313,20 @@ class Host implements exe.WasmHost {
   }
 
   create_surface(width: number, height: number): number {
-    const surface = document.createElement("canvas");
-    surface.width = width;
-    surface.height = height;
-    surface.style.display = "none";
-    document.body.appendChild(surface);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.style.display = "none";
+    document.body.appendChild(canvas);
 
     const id = this.nextSurface++;
-    this.surfaces.set(id, surface);
+    // Keep one ImageData per surface: allocating it every frame is a lot of
+    // garbage for a 640x480 surface.
+    this.surfaces.set(id, {
+      canvas,
+      ctx: canvas.getContext("2d")!,
+      imageData: new ImageData(width, height),
+    });
     return id;
   }
 
@@ -322,6 +336,7 @@ class Host implements exe.WasmHost {
     this.window_.width = width;
     this.window_.height = height;
     document.body.appendChild(this.window_);
+    this.windowCtx = this.window_.getContext("2d")!;
     this.messageQueue.listen(this.window_);
     return 1;
   }
@@ -333,21 +348,18 @@ class Host implements exe.WasmHost {
 
   render(_window_id: number, surface_id: number) {
     const surface = this.surfaces.get(surface_id)!;
-    this.window_!.getContext("2d")!.drawImage(surface, 0, 0);
+    this.windowCtx!.drawImage(surface.canvas, 0, 0);
     this.finishBoot();
   }
 
   set_pixels(id: number, ptr: number, len: number): number {
     // TODO: investigate using OffscreenCanvas here instead,
     // https://news.ycombinator.com/item?id=48297805
-    const copy = new Uint8ClampedArray(
-      this.wasmMemory.buffer,
-      ptr,
-      len,
-    ).slice();
     const surface = this.surfaces.get(id)!;
-    const imageData = new ImageData(copy, surface.width);
-    surface.getContext("2d")!.putImageData(imageData, 0, 0);
+    surface.imageData.data.set(
+      new Uint8ClampedArray(this.wasmMemory.buffer, ptr, len),
+    );
+    surface.ctx.putImageData(surface.imageData, 0, 0);
     return 1;
   }
 
